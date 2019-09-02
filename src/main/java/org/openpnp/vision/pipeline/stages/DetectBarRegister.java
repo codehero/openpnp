@@ -152,6 +152,16 @@ public class DetectBarRegister extends CvStage {
 			return mp;
 		}
 
+		private Point calcLineLineIntersection(Point p0, Point d0, Point p1, Point d1){
+			double dx = p1.x - p0.x;
+			double dy = p1.y - p0.y;
+
+			double cross = d0.x * d1.y - d0.y * d1.x;
+			double t = (dx * d1.y - dy * d1.x) / cross;
+			Point p = new Point(p0.x + d0.x * t, p0.y + d0.y * t);
+			return p;
+		}
+
 		private Point calcIntersection(double rp, double tp, double ra, double ta){
 			/* Got a good reading.
 				 Work in cartesian space to determine intersection 
@@ -480,12 +490,19 @@ public class DetectBarRegister extends CvStage {
 				   but a more robust algorithm would look for discontinuites in the t coords
 				   and filter out those points that are not clearly part of the bar. */
 
+					dx0 = Math.cos(theta_0_avg);
+					dy0 = Math.sin(theta_0_avg);
+
+					dx1 = Math.cos(theta_1_avg);
+					dy1 = Math.sin(theta_1_avg);
+
+
 					double t0_min = Double.POSITIVE_INFINITY;
 					double t0_max = -Double.POSITIVE_INFINITY;
 					double t0_edge_dist = Double.POSITIVE_INFINITY;
 					for(int i = 0; i < line0.size(); ++i){
 						Point p = line0.get(i);
-						double rt = Math.cos(theta_0_avg) * p.y + -Math.sin(theta_0_avg) * p.x;
+						double rt = dx0 * p.y + - dy0 * p.x;
 
 						if(rt > t0_max){
 							t0_max = rt;
@@ -509,7 +526,7 @@ public class DetectBarRegister extends CvStage {
 					double t1_edge_dist = Double.POSITIVE_INFINITY;
 					for(int i = 0; i < line1.size(); ++i){
 						Point p = line1.get(i);
-						double rt = Math.cos(theta_1_avg) * p.y + -Math.sin(theta_1_avg) * p.x;
+						double rt = dx1 * p.y + -dy1 * p.x;
 
 						if(rt > t1_max){
 							t1_max = rt;
@@ -546,32 +563,79 @@ public class DetectBarRegister extends CvStage {
 							double v = mat.get(i, k)[0];
 							if(v > 0){
 
-								double rp = dx0 * k + dy0 * i;
+								double rp0 = dx0 * k + dy0 * i;
+								double rp1 = dx1 * k + dy1 * i;
 
-								if(Math.abs(rp - rho_0_avg) < p_sf){
-									Point p = new Point(k, i);
-									line0.add(p);
-									continue;
-								}
+								/* Check if point is in between lines */
+								if(rp0 > (rho_0_avg + p_sf) && rp1 < (rho_1_avg - p_sf)){
 
-								rp = dx1 * k + dy1 * i;
-								if(Math.abs(rp - rho_1_avg) < p_sf){
-									Point p = new Point(k, i);
-									line1.add(p);
+									/* Check if point is close to the end of the bar. */
+									double rt0 = dx0 * i + - dy0 * k;
+									if(t0_edge_dist > 0){
+										/* t1_min represents the end of the bar.*/
+										if(rt0 > t0_min - p_sf && rt0 < t0_min + p_sf){
+											Point p = new Point(k, i);
+											endline.add(p);
+										}
+									}
+									else{
+										/* t1_min represents the end of the bar.*/
+										if(rt0 > t0_max - p_sf && rt0 < t0_max + p_sf){
+											Point p = new Point(k, i);
+											endline.add(p);
+										}
+									}
 								}
 							}
 						}
 					}
 
+					/* OK now let's regress this line. */
+					MatOfPoint mline2 = new MatOfPoint();
+					mline2.fromList(endline);
+					Mat fline2 = new Mat();
+					Imgproc.fitLine(mline2, fline2, Imgproc.CV_DIST_L2, 0, 0.01, 0.01);
+
+					Logger.trace("EV " + fline2.get(2,0)[0] + " " + fline2.get(3,0)[0]);
+					Logger.trace("EV A" + (Math.acos(fline2.get(0,0)[0]) / Math.PI * 180.0));
+
+					Point eb = new Point(fline2.get(2,0)[0], fline2.get(3,0)[0]);
+					Point ev = new Point(fline2.get(0,0)[0], fline2.get(1,0)[0]);
+
+					Point l0b = new Point(fline0.get(2,0)[0], fline0.get(3,0)[0]);
+					Point l0v = new Point(fline0.get(0,0)[0], fline0.get(1,0)[0]);
+
+					Point l1b = new Point(fline1.get(2,0)[0], fline1.get(3,0)[0]);
+					Point l1v = new Point(fline1.get(0,0)[0], fline1.get(1,0)[0]);
+
+					/* Intercept the line with the other lines to find the bar endpoints */
+					Point ep0 = calcLineLineIntersection(eb, ev, l0b, l0v);
+					Point ep1 = calcLineLineIntersection(eb, ev, l1b, l1v);
+
 					retval.add(renderLine(rho_0_avg, theta_0_avg, t0_min, t0_max));
 					retval.add(renderLine(rho_1_avg, theta_1_avg, t1_min, t1_max));
+
+        	List<Point> endlineFinal = new ArrayList<>();
+					endlineFinal.add(ep0);
+					endlineFinal.add(ep1);
+
+					MatOfPoint eline = new MatOfPoint();
+					eline.fromList(endlineFinal);
+					retval.add(eline);
+
+					/*
+					MatOfPoint eline2 = new MatOfPoint();
+					eline2.fromList(endline);
+					retval.add(eline2);
+					*/
+
+
+					fline2.release();
 				}
 
 				fline0.release();
 				fline1.release();
 				output.release();
-				/* Create a list of angles. */
-
         return new Result(null, retval);
     }
 }
