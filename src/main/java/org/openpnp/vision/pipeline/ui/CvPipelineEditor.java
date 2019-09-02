@@ -24,6 +24,7 @@ import org.openpnp.vision.pipeline.stages.CreateFootprintTemplateImage;
 import org.openpnp.vision.pipeline.stages.CreateModelTemplateImage;
 import org.openpnp.vision.pipeline.stages.DetectCirclesHough;
 import org.openpnp.vision.pipeline.stages.DetectLinesHough;
+import org.openpnp.vision.pipeline.stages.DetectBarRegister;
 import org.openpnp.vision.pipeline.stages.DetectEdgesCanny;
 import org.openpnp.vision.pipeline.stages.DetectEdgesLaplacian;
 import org.openpnp.vision.pipeline.stages.DetectEdgesRobertsCross;
@@ -93,6 +94,7 @@ public class CvPipelineEditor extends JPanel {
         registerStageClass(CreateModelTemplateImage.class);
         registerStageClass(DetectCirclesHough.class);
         registerStageClass(DetectLinesHough.class);
+        registerStageClass(DetectBarRegister.class);
         registerStageClass(DetectEdgesCanny.class);
         registerStageClass(DetectEdgesRobertsCross.class);
         registerStageClass(DetectEdgesLaplacian.class);
