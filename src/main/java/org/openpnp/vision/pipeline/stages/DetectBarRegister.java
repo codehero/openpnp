@@ -53,6 +53,10 @@ public class DetectBarRegister extends CvStage {
     @Property(description = "Side filter for reassessing edge pixels, percent of screen diagonal.")
     private double sideFilter = 1;
 
+    @Attribute
+    @Property(description = "Draw model or just return list of points.")
+    private boolean drawModel = true;
+
 
     public double getRho() {
         return this.rho;
@@ -118,6 +122,15 @@ public class DetectBarRegister extends CvStage {
         this.sideFilter = v;
     }
 
+    public boolean getDrawModel() {
+        return this.drawModel;
+    }
+
+    public void setDrawModel(boolean v) {
+        this.drawModel = v;
+    }
+
+
 		private double edgeDist(Point p, double width, double height){
 			double dx = width - p.x;
 			double dy = height - p.y;
@@ -133,7 +146,7 @@ public class DetectBarRegister extends CvStage {
 			return (dx < dy) ? dx : dy;
 		}
 
-		private MatOfPoint renderLine(double rho, double theta, double t0, double t1){
+		private List<Point> renderLineP(double rho, double theta, double t0, double t1){
 			double a = Math.cos(theta);
 			double b = Math.sin(theta);
 			double x0 = a*rho;
@@ -147,8 +160,12 @@ public class DetectBarRegister extends CvStage {
 			tmp.add(new Point(x1, y1));
 			tmp.add(new Point(x2, y2));
 
+			return tmp;
+		}
+
+		private MatOfPoint renderLine(double rho, double theta, double t0, double t1){
 			MatOfPoint mp = new MatOfPoint();
-			mp.fromList(tmp);
+			mp.fromList(renderLineP(rho, theta, t0, t1));
 			return mp;
 		}
 
@@ -216,7 +233,7 @@ public class DetectBarRegister extends CvStage {
 				double p_sf = this.sideFilter * m / 100.0;
 
 				/* This is our return value. */
-        List<MatOfPoint> retval = new ArrayList<>();
+        List<MatOfPoint> draw_retval = new ArrayList<>();
 
 				/* This first pass is a way to get the major axis of the bar
 				   There are 2 expected results:
@@ -234,7 +251,7 @@ public class DetectBarRegister extends CvStage {
 
 				Logger.trace("Hough Lines " + output.rows());
 				if(0 == output.rows()){
-	        return new Result(null, retval);
+	        return new Result(null, draw_retval);
 				}
 
 				/* This is more of a sanity check.
@@ -256,11 +273,11 @@ public class DetectBarRegister extends CvStage {
 						double rhi = output.get(i, 0)[0];
 						double thi = output.get(i, 0)[1];
 						Logger.trace("L " + rhi + " " + (thi / Math.PI * 180.0));
-						retval.add(renderLine(rhi, thi, 1000, -1000));
+						draw_retval.add(renderLine(rhi, thi, 1000, -1000));
 					}
 
 					/* just do a list of lines. */
-	        return new Result(null, retval);
+	        return new Result(null, draw_retval);
 				}
 
 				/* Now we need to determine the bounding rho values.
@@ -307,11 +324,11 @@ public class DetectBarRegister extends CvStage {
 							double rhi = output.get(i, 0)[0];
 							double thi = output.get(i, 0)[1];
 							Logger.trace("L " + rhi + " " + (thi / Math.PI * 180.0));
-							retval.add(renderLine(rhi, thi, 1000, -1000));
+							draw_retval.add(renderLine(rhi, thi, 1000, -1000));
 						}
 
 						/* just do a list of lines. */
-						return new Result(null, retval);
+						return new Result(null, draw_retval);
 
 					}
 
@@ -363,10 +380,10 @@ public class DetectBarRegister extends CvStage {
 						double rhi = output.get(i, 0)[0];
 						double thi = output.get(i, 0)[1];
 						Logger.trace("L " + rhi + " " + (thi / Math.PI * 180.0));
-						retval.add(renderLine(rhi, thi, 1000, -1000));
+						draw_retval.add(renderLine(rhi, thi, 1000, -1000));
 					}
 
-					return new Result(null, retval);
+					return new Result(null, draw_retval);
 				}
 
 				/* At this point, we can be reasonably sure that the sides of the
@@ -431,6 +448,7 @@ public class DetectBarRegister extends CvStage {
         Mat fline1 = new Mat();
         Imgproc.fitLine(mline1, fline1, Imgproc.CV_DIST_L2, 0, 0.01, 0.01);
 
+        List<Point> retval = new ArrayList<>();
 				{
 					theta_0_avg = Math.asin(fline0.get(0,0)[0]);
 					rho_0_avg = Math.cos(theta_0_avg) * fline0.get(2,0)[0] + Math.sin(theta_0_avg) * fline0.get(3,0)[0];
@@ -448,15 +466,15 @@ public class DetectBarRegister extends CvStage {
 
 						MatOfPoint mp = new MatOfPoint();
 						mp.fromList(line0);
-						retval.add(mp);
+						draw_retval.add(mp);
 
 						MatOfPoint mp2 = new MatOfPoint();
 						mp2.fromList(line1);
-						retval.add(mp2);
+						draw_retval.add(mp2);
 
 						mp.release();
 						mp2.release();
-						return new Result(null, retval);
+						return new Result(null, draw_retval);
 					}
 
 					/* The angles must be parallel within a tolerance
@@ -467,14 +485,14 @@ public class DetectBarRegister extends CvStage {
 
 						MatOfPoint mp = new MatOfPoint();
 						mp.fromList(line0);
-						retval.add(mp);
+						draw_retval.add(mp);
 
 						MatOfPoint mp2 = new MatOfPoint();
 						mp2.fromList(line1);
-						retval.add(mp2);
+						draw_retval.add(mp2);
 						mp.release();
 						mp2.release();
-						return new Result(null, retval);
+						return new Result(null, draw_retval);
 					}
 
 					/* At this point we can be confident we have the best calculation
@@ -612,8 +630,8 @@ public class DetectBarRegister extends CvStage {
 					Point ep0 = calcLineLineIntersection(eb, ev, l0b, l0v);
 					Point ep1 = calcLineLineIntersection(eb, ev, l1b, l1v);
 
-					retval.add(renderLine(rho_0_avg, theta_0_avg, t0_min, t0_max));
-					retval.add(renderLine(rho_1_avg, theta_1_avg, t1_min, t1_max));
+					draw_retval.add(renderLine(rho_0_avg, theta_0_avg, t0_min, t0_max));
+					draw_retval.add(renderLine(rho_1_avg, theta_1_avg, t1_min, t1_max));
 
         	List<Point> endlineFinal = new ArrayList<>();
 					endlineFinal.add(ep0);
@@ -621,14 +639,17 @@ public class DetectBarRegister extends CvStage {
 
 					MatOfPoint eline = new MatOfPoint();
 					eline.fromList(endlineFinal);
-					retval.add(eline);
+					draw_retval.add(eline);
+
+					retval.add(ep0);
+					retval.add(ep1);
+					retval.add(new Point(rho_0_avg, theta_0_avg));
+					retval.add(new Point(rho_1_avg, theta_1_avg));
 
 					/*
-					MatOfPoint eline2 = new MatOfPoint();
-					eline2.fromList(endline);
-					retval.add(eline2);
+					retval.addAll(renderLineP(rho_0_avg, theta_0_avg, t0_min, t0_max));
+					retval.addAll(renderLineP(rho_1_avg, theta_1_avg, t1_min, t1_max));
 					*/
-
 
 					fline2.release();
 				}
@@ -636,6 +657,11 @@ public class DetectBarRegister extends CvStage {
 				fline0.release();
 				fline1.release();
 				output.release();
-        return new Result(null, retval);
+				if(this.drawModel){
+        	return new Result(null, draw_retval);
+				}
+				else{
+        	return new Result(null, retval);
+				}
     }
 }
